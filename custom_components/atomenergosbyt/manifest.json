@@ -1,0 +1,19 @@
+{
+  "domain": "atomenergosbyt",
+  "name": "АтомЭнергоСбыт",
+  "version": "0.1",
+  "config_flow": true,
+  "dependencies": [],
+  "documentation": "https://github.com/alastorf32/HA-Integration-AtomEnergoSbyt/blob/main/README.md",
+  "documentation": "https://github.com/alastorf32/HA-Integration-AtomEnergoSbyt",
+  "issue_tracker": "https://github.com/alastorf32/HA-Integration-AtomEnergoSbyt/issues",
+  "codeowners": ["@alastorf32"],
+  "requirements": [
+    "requests",
+    "urllib3",
+    "bs4"
+  ],
+  "iot_class": "cloud_polling",
+  "translations": "translations"
+}
+
