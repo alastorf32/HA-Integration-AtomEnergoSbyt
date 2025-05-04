@@ -43,7 +43,12 @@ class atomenergosbytConfigFlow(config_entries.ConfigFlow, domain=const.DOMAIN):
             # Проверяем данные с сервера
             sender = AtomEnergoSender(ls_number)
             parseData = await self.hass.async_add_executor_job(sender.get_meter_id)
-            meter_id = parseData["meter_id"]
+            if "meter_id" in parseData:
+                meter_id = parseData["meter_id"]
+            elif len(parseData["counters"]) == 0:
+                meter_id = const.ERR_NO_COUNTERS
+            else:
+                meter_id = 0
             custom_log(f"async_step_user:parseData[meter_id] = {meter_id}")
     
             if meter_id == "None":
@@ -69,10 +74,12 @@ class atomenergosbytConfigFlow(config_entries.ConfigFlow, domain=const.DOMAIN):
                 errors["base"] = "http_response_error"
             elif meter_id == const.ERR_TOKEN_EXTRACT:
                 errors["base"] = "http_token_error"
+            elif meter_id == const.ERR_UNKNOWN_ERROR:
+                errors["base"] = "unknown_error"
             else:
                 return self.async_create_entry(
                     title=ls_number,
-                    data={const.CONF_LS_NUMBER: ls_number}
+                    data={const.CONF_LS_NUMBER: ls_number, const.CONF_COUNTERS_DATA: parseData}
                 )
     
         # Показываем форму заново с ошибками

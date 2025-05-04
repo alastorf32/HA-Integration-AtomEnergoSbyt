@@ -2,6 +2,7 @@ import requests
 import urllib3
 import logging
 import os
+import re
 from bs4 import BeautifulSoup
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
@@ -49,63 +50,74 @@ class AtomEnergoSender:
         self.cookies = None
 
     def parse_counter_data(self, html_content):
-        """Парсим все данные счетчика из HTML с фильтрацией полей"""
+        """Парсит все карточки счетчиков на странице, не группируя по типу ресурса."""
         soup = BeautifulSoup(html_content, 'html.parser')
+        counters = []
 
-        # Словарь для хранения результатов
-        counter_data = {
-            'value_field': None,  # Поле для ввода показаний
-            'counter_fields': {},  # Поля, начинающиеся с counters[
-            'service_tokens': {},  # Сервисные токены (lk_add_value_token и др.)
-            'meter_id': None  # Номер счетчика
+        # 1. Найти все карточки счётчиков
+        card_blocks = soup.find_all("div", class_="card")
+        #for idx, card in enumerate(card_blocks):
+#            print(f"Card {idx}:", card.prettify())
+
+        #for card in card_blocks:
+        for idx, card in enumerate(card_blocks[1:]):  # Начинаем с 1-го элемента
+            counter = {
+                "name": None,  # "Холодное водоснабжение", "Электроснабжение", и т.д.
+                "zavod_nomer": None,  # № 12345678
+                "previous_value": None,  # Последнее показание
+                "fields": {}  # Все input name/value (text + hidden)
+            }
+
+            # Название счётчика (тип услуги)
+            strong_tag = card.find("strong")
+            if strong_tag:
+                counter_name = strong_tag.get_text(strip=True)
+                if counter_name.endswith("."):
+                    counter_name = counter_name[:len(counter_name) - 1]
+                counter["name"] = counter_name
+
+            # Заводской номер (из <h2> "№ ...")
+            h2_tags = card.find_all("h2")
+            for h2 in h2_tags:
+                if "№" in h2.text:
+                    counter["zavod_nomer"] = h2.get_text(strip=True).split("№")[-1].strip()
+                    break
+
+            # Предыдущее показание (ищем div, содержащий только цифры)
+            float_rights = card.find_all("div", class_="float-right")
+            for fr in float_rights:
+                if "Предыдущее показание" in fr.get_text(strip=True):
+                    value_div = fr.find("div")
+                    if value_div:
+                        #counter["previous_value"] = value_div.get_text(strip=True).split()[0]  # Получаем только число
+                        previous_value_text = value_div.get_text(strip=True)
+
+                        # Используем регулярное выражение для извлечения только цифр
+                        match = re.search(r'\d+', previous_value_text)
+                        if match:
+                            counter["previous_value"] = match.group(0)  # Сохраняем только найденное число
+                    break
+
+            # Все input поля
+            for input_field in card.find_all("input"):
+                name = input_field.get("name")
+                value = input_field.get("value", "")
+                if name:
+                    counter["fields"][name] = value
+
+            counters.append(counter)
+
+        # 2. Общие токены (вне карточек)
+        service_tokens = {}
+        for token_name in ["lk_add_value_token"]:
+            token_input = soup.find("input", {"name": token_name})
+            if token_input:
+                service_tokens[token_name] = token_input.get("value")
+
+        return {
+            "counters": counters,
+            "service_tokens": service_tokens
         }
-
-        # 1. Находим поле для ввода показаний
-        input_field = soup.find('input', {
-            'type': 'text',
-            'class': lambda x: x and 'form-control' in x and 'sing-form' in x,
-            'name': lambda x: x and x.startswith('counters[')
-        })
-
-        if input_field:
-            counter_data['value_field'] = {
-                'name': input_field.get('name'),
-                'pattern': input_field.get('pattern'),
-                'placeholder': input_field.get('placeholder')
-            }
-        # 2. Находим сервисный токен
-        counter_data['service_tokens'] = {
-                'csrftoken': soup.find('meta', {'name': 'csrf-token-value'}).get('content')
-            }
-        # 3. Обрабатываем все скрытые поля
-        for field in soup.find_all('input', {'type': 'hidden'}):
-            name = field.get('name')
-            value = field.get('value')
-
-            if not name:
-                continue
-
-            # 3. Разделяем поля на счетчики и сервисные токены
-            if name.startswith('counters['):
-                counter_data['counter_fields'][name] = value
-
-                # Извлекаем номер счетчика
-                if 'ZavodNomer' in name:
-                    counter_data['meter_id'] = value
-
-            elif any(x in name for x in ['lk_add_value_token']):
-                counter_data['service_tokens'][name] = value
-
-        # 4. Дополнительный поиск номера счетчика (если не нашли в hidden)
-        if not counter_data['meter_id']:
-            for h2 in soup.find_all('h2'):
-                if '№' in h2.text:
-                    number = h2.get_text(strip=True).split('№')[-1].strip()
-                    if number:
-                        counter_data['meter_id'] = number
-                        break
-
-        return counter_data
 
     def get_meter_id(self):
         """Получаем номер счетчика с правильными параметрами запроса"""
@@ -205,7 +217,7 @@ class AtomEnergoSender:
                 else:
                     custom_log("[AtomEnergoSender::get_meter_id] Сообщений с 5 по 25 число НЕТ]")
                     # Анализируем результаты
-                    if not data['meter_id']:
+                    if len(data["counters"]) == 0:
                         custom_log("[AtomEnergoSender::get_meter_id] [Ошибка] Не удалось определить номер счетчика")
                         return {"meter_id": "None"}
                     return data
