@@ -1,6 +1,6 @@
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
-from .const import DOMAIN, CONF_LS_NUMBER
+from .const import DOMAIN, CONF_LS_NUMBER, CONF_COUNTERS_DATA
 
 PLATFORMS = ["sensor"]
 

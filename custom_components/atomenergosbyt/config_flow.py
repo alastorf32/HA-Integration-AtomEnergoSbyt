@@ -78,7 +78,7 @@ class atomenergosbytConfigFlow(config_entries.ConfigFlow, domain=const.DOMAIN):
                 errors["base"] = "unknown_error"
             else:
                 return self.async_create_entry(
-                    title=ls_number,
+                    title=f"Лицевой счет № {ls_number}",
                     data={const.CONF_LS_NUMBER: ls_number, const.CONF_COUNTERS_DATA: parseData}
                 )
     
@@ -98,7 +98,7 @@ class atomenergosbytConfigFlow(config_entries.ConfigFlow, domain=const.DOMAIN):
             if user_input.get("confirm"):
                 # Пользователь согласился продолжить регистрацию
                 return self.async_create_entry(
-                    title=self.ls_number,
+                    title=f"Лицевой счет № {ls_number}",
                     data={const.CONF_LS_NUMBER: self.ls_number}
                 )
             else:
