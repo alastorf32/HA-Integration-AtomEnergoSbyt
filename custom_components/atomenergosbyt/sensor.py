@@ -19,13 +19,29 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     data = hass.data[DOMAIN][config_entry.entry_id]
     ls_number = data[CONF_LS_NUMBER]
     counters_data = data[CONF_COUNTERS_DATA].get("counters", {})
-    
-    # Создаем список сенсоров
+
     sensors = []
     for counter_id, counter_info in counters_data.items():
-        sensors.append(AtomCounterSensor(ls_number, counter_id, counter_info))
+        name = counter_info.get("name", "").strip()
+        previous_value = counter_info.get("previous_value")
+        zavod_nomer = counter_info.get("zavod_nomer")
 
-    # Добавляем сенсоры в HA
+        # Определяем тип сенсора по ключевому слову в name
+        sensor_type = "unknown"
+        for prefix, sensor_key in SENSOR_NAME_MAP.items():
+            if name.startswith(prefix):
+                sensor_type = sensor_key
+                break
+
+        # Создаём сенсор с уникальным ID на основе ID счётчика
+        sensors.append(AtomEnergoSensor(
+            ls_number=ls_number,
+            counter_id=counter_id,
+            sensor_type=sensor_type,
+            state=previous_value,
+            zavod_nomer=zavod_nomer
+        ))
+
     async_add_entities(sensors)
 
 class AtomCounterSensor(SensorEntity):
@@ -67,12 +83,12 @@ class AtomCounterSensor(SensorEntity):
     @property
     def name(self):
         """Имя сенсора."""
-        return f"atom_{self._ls_number}_{self._sensor_name}_{self._meter_id}"
+        return f"atomsbt_{self._ls_number}_{self._sensor_name}_{self._meter_id}"
 
     @property
     def unique_id(self):
         """Уникальный идентификатор сенсора."""
-        return f"atom_{self._ls_number}_{self._meter_id}"
+        return f"atomsbt_{self._ls_number}_{self._meter_id}"
 
     @property
     def state(self):
